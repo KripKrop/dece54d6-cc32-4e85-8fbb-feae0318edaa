@@ -10,7 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { toast } from "@/hooks/use-toast";
 import { Loader2, Download } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { DataGrid } from "@/components/DataGrid";
 interface QueryViewProps {
   selectedTable?: string;
   onSelectTable?: (t: string) => void;
@@ -373,35 +373,7 @@ useEffect(() => {
 
       <Card className="relative">
         <CardContent className="pt-6">
-        <div className="rounded-md border overflow-auto max-h-[520px]">
-          <Table className="table-fixed">
-            <TableHeader className="sticky top-0 z-10 bg-muted/50">
-              <TableRow>
-                {columns.map((c) => (
-                  <TableHead key={c} className="min-w-[160px]">{c}</TableHead>
-                ))}
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {rows.map((r, i) => (
-                <TableRow key={i} className="animate-fade-in">
-                  {columns.map((c) => (
-                    <TableCell key={c} className="whitespace-pre-wrap break-words align-top">
-                      {String(r?.[c] ?? "")}
-                    </TableCell>
-                  ))}
-                </TableRow>
-              ))}
-              {!rows.length && (
-                <TableRow>
-                  <TableCell colSpan={columns.length || 1} className="text-center text-muted-foreground">
-                    No data
-                  </TableCell>
-                </TableRow>
-              )}
-            </TableBody>
-          </Table>
-        </div>
+        <DataGrid columns={columns} rows={rows} height={520} />
         {isFetching && (
           <div className="absolute inset-0 grid place-items-center bg-background/60">
             <Loader2 className="h-6 w-6 animate-spin" />
