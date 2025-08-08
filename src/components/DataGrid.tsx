@@ -72,11 +72,15 @@ export function DataGrid({ columns, rows, height = 520 }: DataGridProps) {
     TableHead: (props) => (
       <TableHeader
         {...props}
-        className="sticky top-0 z-10 bg-muted/70 backdrop-blur supports-[backdrop-filter]:bg-muted/50"
+        className="sticky top-0 z-10 bg-muted"
       />
     ),
-    TableRow: (props) => <TableRow {...props} className="border-b" />,
-    TableBody: (props) => <TableBody {...props} />,
+    TableRow: React.forwardRef<HTMLTableRowElement, React.HTMLAttributes<HTMLTableRowElement>>((props, ref) => (
+      <TableRow ref={ref} {...props} />
+    )),
+    TableBody: React.forwardRef<HTMLTableSectionElement, React.HTMLAttributes<HTMLTableSectionElement>>((props, ref) => (
+      <TableBody ref={ref} {...props} />
+    )),
     TableFoot: undefined as any,
   };
 
