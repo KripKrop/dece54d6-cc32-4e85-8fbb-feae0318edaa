@@ -1,7 +1,6 @@
 import React, { useMemo, useRef } from "react";
 import { TableVirtuoso, TableComponents } from "react-virtuoso";
 import {
-  Table as ShadTable,
   TableBody,
   TableCell,
   TableHead,
@@ -46,7 +45,8 @@ export function DataGrid({ columns, rows, height = 520 }: DataGridProps) {
       ({ style, ...props }, ref) => (
         <div
           ref={(node) => {
-            (ref as any)?.(node);
+            if (typeof ref === "function") ref(node as any);
+            else if (ref && typeof (ref as any) === "object") (ref as any).current = node;
             scrollerRef.current = node;
           }}
           style={{ ...style, height }}
@@ -56,10 +56,10 @@ export function DataGrid({ columns, rows, height = 520 }: DataGridProps) {
       )
     ),
     Table: (props) => (
-      <ShadTable
+      <table
         {...props}
-        style={{ width: totalWidth }}
-        className="table-fixed"
+        style={{ ...(props as any).style, width: totalWidth }}
+        className="w-full caption-bottom text-sm table-fixed"
       >
         <colgroup>
           {colWidths.map((w, i) => (
@@ -67,7 +67,7 @@ export function DataGrid({ columns, rows, height = 520 }: DataGridProps) {
           ))}
         </colgroup>
         {props.children}
-      </ShadTable>
+      </table>
     ),
     TableHead: (props) => (
       <TableHeader
