@@ -9,14 +9,30 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "@/hooks/use-toast";
 import { Loader2, Download } from "lucide-react";
-import { FixedSizeList as List } from "react-window";
-
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 interface QueryViewProps {
   selectedTable?: string;
   onSelectTable?: (t: string) => void;
 }
 
-const OPS: FilterOp[] = ["eq", "neq", "lt", "lte", "gt", "gte", "contains"];
+const OPS: FilterOp[] = [
+  "eq",
+  "neq",
+  "lt",
+  "lte",
+  "gt",
+  "gte",
+  "like",
+  "in",
+  "between",
+  "in_range",
+  "is_null",
+  "is_not_null",
+];
+
+const NO_VALUE_OPS = new Set<FilterOp>(["is_null", "is_not_null"]);
+const ARRAY_VALUE_OPS = new Set<FilterOp>(["in", "in_range"]);
 
 function useDebouncedCallback<T extends (...args: any[]) => void>(fn: T, delay = 300) {
   const ref = useRef<number | undefined>();
@@ -48,16 +64,50 @@ export function QueryView({ selectedTable, onSelectTable }: QueryViewProps) {
     enabled: !!selectedTable,
   });
 
-  useEffect(() => {
+useEffect(() => {
     setFields([]);
     setFilters([]);
     setOffset(0);
   }, [selectedTable]);
 
+  const coerceType = (v: string) => {
+    const trimmed = v.trim();
+    if (trimmed === "true") return true;
+    if (trimmed === "false") return false;
+    const n = Number(trimmed);
+    return Number.isNaN(n) ? trimmed : n;
+  };
+
   const queryBody: QueryBody | undefined = useMemo(() => {
     if (!selectedTable) return undefined;
+    const processed = filters
+      .map((f) => {
+        if (!f.column) return null;
+        const op = f.op;
+        if (NO_VALUE_OPS.has(op)) {
+          return { column: f.column, op } as any;
+        }
+        const raw = (f.value ?? "").toString();
+        if (op === "between") {
+          const parts = raw.split(",").map((s) => s.trim()).filter(Boolean);
+          if (parts.length !== 2) return null;
+          return { column: f.column, op, value: parts.map(coerceType) } as any;
+        }
+        if (ARRAY_VALUE_OPS.has(op)) {
+          const arr = raw
+            .split(",")
+            .map((s) => s.trim())
+            .filter((s) => s.length > 0)
+            .map(coerceType);
+          if (!arr.length) return null;
+          return { column: f.column, op, value: arr } as any;
+        }
+        if (!raw) return null;
+        return { column: f.column, op, value: coerceType(raw) } as any;
+      })
+      .filter(Boolean) as any;
     return {
-      filters: filters.filter((f) => f.column && f.value !== undefined && f.value !== "") as any,
+      filters: processed,
       logical_operator: logical,
       order_by: orderBy.column ? (orderBy as any) : undefined,
       limit,
@@ -116,16 +166,6 @@ export function QueryView({ selectedTable, onSelectTable }: QueryViewProps) {
     return [] as string[];
   }, [fields, rows]);
 
-  const Row = ({ index, style }: { index: number; style: React.CSSProperties }) => {
-    const r = rows[index];
-    return (
-      <div style={style} className="grid grid-cols-[repeat(var(--cols),minmax(120px,1fr))] border-b">
-        {columns.map((c) => (
-          <div key={c} className="px-3 py-2 text-sm hover:bg-muted/50">{String(r?.[c] ?? "")}</div>
-        ))}
-      </div>
-    );
-  };
 
   return (
     <section className="container mx-auto space-y-4">
@@ -162,19 +202,22 @@ export function QueryView({ selectedTable, onSelectTable }: QueryViewProps) {
                   ))}
                 </SelectContent>
               </Select>
-              {fields.length > 0 && (
-                <div className="flex flex-wrap gap-2">
-                  {fields.map((f) => (
-                    <button
-                      key={f}
-                      className="rounded-md border px-2 py-1 text-xs hover:bg-muted"
-                      onClick={() => setFields((prev) => prev.filter((x) => x !== f))}
-                    >
-                      {f} ×
-                    </button>
-                  ))}
-                </div>
-              )}
+                {fields.length > 0 && (
+                  <ScrollArea className="max-h-24 rounded-md border">
+                    <div className="flex flex-wrap gap-2 p-2">
+                      {fields.map((f) => (
+                        <button
+                          key={f}
+                          className="rounded-md border px-2 py-1 text-xs hover:bg-muted"
+                          onClick={() => setFields((prev) => prev.filter((x) => x !== f))}
+                          title="Remove column"
+                        >
+                          {f} ×
+                        </button>
+                      ))}
+                    </div>
+                  </ScrollArea>
+                )}
             </div>
 
             <div className="grid gap-2">
@@ -244,39 +287,85 @@ export function QueryView({ selectedTable, onSelectTable }: QueryViewProps) {
             </div>
 
             <div className="space-y-2">
-              {filters.map((f, idx) => (
-                <div key={idx} className="grid gap-2 md:grid-cols-[1fr_120px_1fr_80px]">
-                  <select
-                    className="h-9 rounded-md border bg-background px-3 text-sm"
-                    value={f.column || ""}
-                    onChange={(e) => setFilters((arr) => arr.map((it, i) => (i === idx ? { ...it, column: e.target.value } : it)))}
-                  >
-                    <option value="">Column…</option>
-                    {cols?.columns?.map((c) => (
-                      <option key={c} value={c}>
-                        {c}
-                      </option>
-                    ))}
-                  </select>
-                  <select
-                    className="h-9 rounded-md border bg-background px-3 text-sm"
-                    value={f.op}
-                    onChange={(e) => setFilters((arr) => arr.map((it, i) => (i === idx ? { ...it, op: e.target.value as any } : it)))}
-                  >
-                    {OPS.map((op) => (
-                      <option key={op} value={op}>
-                        {op}
-                      </option>
-                    ))}
-                  </select>
-                  <Input
-                    placeholder="Value"
-                    value={f.value || ""}
-                    onChange={(e) => setFilters((arr) => arr.map((it, i) => (i === idx ? { ...it, value: e.target.value } : it)))}
-                  />
-                  <Button variant="ghost" onClick={() => setFilters((arr) => arr.filter((_, i) => i !== idx))}>Remove</Button>
-                </div>
-              ))}
+              {filters.map((f, idx) => {
+                const [low, high] = (f.value || "").toString().split(",");
+                return (
+                  <div key={idx} className="grid gap-2 md:grid-cols-[1fr_160px_1fr_80px]">
+                    <select
+                      className="h-9 rounded-md border bg-background px-3 text-sm"
+                      value={f.column || ""}
+                      onChange={(e) => setFilters((arr) => arr.map((it, i) => (i === idx ? { ...it, column: e.target.value } : it)))}
+                    >
+                      <option value="">Column…</option>
+                      {cols?.columns?.map((c) => (
+                        <option key={c} value={c}>
+                          {c}
+                        </option>
+                      ))}
+                    </select>
+                    <select
+                      className="h-9 rounded-md border bg-background px-3 text-sm"
+                      value={f.op}
+                      onChange={(e) => setFilters((arr) => arr.map((it, i) => (i === idx ? { ...it, op: e.target.value as any, value: undefined } : it)))}
+                    >
+                      {OPS.map((op) => (
+                        <option key={op} value={op}>
+                          {op}
+                        </option>
+                      ))}
+                    </select>
+                    {f.op === "between" ? (
+                      <div className="flex gap-2">
+                        <Input
+                          placeholder="Low"
+                          value={low ?? ""}
+                          onChange={(e) =>
+                            setFilters((arr) =>
+                              arr.map((it, i) =>
+                                i === idx ? { ...it, value: `${e.target.value},${high ?? ""}` } : it
+                              )
+                            )
+                          }
+                        />
+                        <Input
+                          placeholder="High"
+                          value={high ?? ""}
+                          onChange={(e) =>
+                            setFilters((arr) =>
+                              arr.map((it, i) =>
+                                i === idx ? { ...it, value: `${low ?? ""},${e.target.value}` } : it
+                              )
+                            )
+                          }
+                        />
+                      </div>
+                    ) : NO_VALUE_OPS.has(f.op) ? (
+                      <div className="px-2 py-2 text-xs text-muted-foreground">No value</div>
+                    ) : ARRAY_VALUE_OPS.has(f.op) ? (
+                      <Input
+                        placeholder="Comma-separated values"
+                        value={(f.value as any) || ""}
+                        onChange={(e) =>
+                          setFilters((arr) =>
+                            arr.map((it, i) => (i === idx ? { ...it, value: e.target.value } : it))
+                          )
+                        }
+                      />
+                    ) : (
+                      <Input
+                        placeholder="Value"
+                        value={(f.value as any) || ""}
+                        onChange={(e) =>
+                          setFilters((arr) =>
+                            arr.map((it, i) => (i === idx ? { ...it, value: e.target.value } : it))
+                          )
+                        }
+                      />
+                    )}
+                    <Button variant="ghost" onClick={() => setFilters((arr) => arr.filter((_, i) => i !== idx))}>Remove</Button>
+                  </div>
+                );
+              })}
             </div>
           </div>
         </CardContent>
@@ -284,24 +373,41 @@ export function QueryView({ selectedTable, onSelectTable }: QueryViewProps) {
 
       <Card className="relative">
         <CardContent className="pt-6">
-          <div className="overflow-auto rounded-md border">
-            <div className="grid grid-cols-[repeat(var(--cols),minmax(120px,1fr))] bg-muted/50">
-              {columns.map((c) => (
-                <div key={c} className="px-3 py-2 text-sm font-medium">{c}</div>
+        <div className="rounded-md border overflow-auto max-h-[520px]">
+          <Table className="table-fixed">
+            <TableHeader className="sticky top-0 z-10 bg-muted/50">
+              <TableRow>
+                {columns.map((c) => (
+                  <TableHead key={c} className="min-w-[160px]">{c}</TableHead>
+                ))}
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {rows.map((r, i) => (
+                <TableRow key={i} className="animate-fade-in">
+                  {columns.map((c) => (
+                    <TableCell key={c} className="whitespace-pre-wrap break-words align-top">
+                      {String(r?.[c] ?? "")}
+                    </TableCell>
+                  ))}
+                </TableRow>
               ))}
-            </div>
-            <div style={{ ['--cols' as any]: String(columns.length) }}>
-              <List height={400} itemCount={rows.length} itemSize={36} width={"100%"}>
-                {Row}
-              </List>
-            </div>
+              {!rows.length && (
+                <TableRow>
+                  <TableCell colSpan={columns.length || 1} className="text-center text-muted-foreground">
+                    No data
+                  </TableCell>
+                </TableRow>
+              )}
+            </TableBody>
+          </Table>
+        </div>
+        {isFetching && (
+          <div className="absolute inset-0 grid place-items-center bg-background/60">
+            <Loader2 className="h-6 w-6 animate-spin" />
           </div>
-          {isFetching && (
-            <div className="absolute inset-0 grid place-items-center bg-background/60">
-              <Loader2 className="h-6 w-6 animate-spin" />
-            </div>
-          )}
-          <div className="mt-2 text-xs text-muted-foreground">Total rows: {result?.total ?? 0}</div>
+        )}
+        <div className="mt-2 text-xs text-muted-foreground">Total rows: {result?.total ?? 0}</div>
         </CardContent>
       </Card>
     </section>

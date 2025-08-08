@@ -1,4 +1,16 @@
-export type FilterOp = "eq" | "neq" | "lt" | "lte" | "gt" | "gte" | "contains";
+export type FilterOp =
+  | "eq"
+  | "neq"
+  | "lt"
+  | "lte"
+  | "gt"
+  | "gte"
+  | "like"
+  | "in"
+  | "between"
+  | "in_range"
+  | "is_null"
+  | "is_not_null";
 
 export interface QueryBody {
   filters: { column: string; op: FilterOp; value: any }[];
